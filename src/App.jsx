@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 
 /* ---------- Datos iniciales ---------- */
 
@@ -25,15 +25,16 @@ function hoyISO() {
 /* ---------- Componente principal ---------- */
 
 export default function App() {
-  const [materias] = useState(MATERIAS_INICIALES);
+  const [materias, setMaterias] = useState(MATERIAS_INICIALES);
   const [clases, setClases] = useState([]);
   const [tareas, setTareas] = useState([]);
   const [vista, setVista] = useState("calendario");
   const [filtro, setFiltro] = useState("todas");
   const [loading, setLoading] = useState(true);
   const [mostrarCompletadas, setMostrarCompletadas] = useState(false);
-  const [formClase, setFormClase] = useState(null);
+  const [formClase, setFormClase] = useState(null); // null | {} (nueva) | clase existente
   const [formTarea, setFormTarea] = useState(null);
+  const [formMateria, setFormMateria] = useState(null);
   const [saveError, setSaveError] = useState(false);
 
   /* cargar datos guardados */
@@ -42,6 +43,9 @@ export default function App() {
       const data = localStorage.getItem(STORAGE_KEY);
       if (data) {
         const parsed = JSON.parse(data);
+        if (Array.isArray(parsed.materias) && parsed.materias.length > 0) {
+          setMaterias(parsed.materias);
+        }
         setClases(Array.isArray(parsed.clases) ? parsed.clases : []);
         setTareas(Array.isArray(parsed.tareas) ? parsed.tareas : []);
       }
@@ -56,12 +60,19 @@ export default function App() {
   useEffect(() => {
     if (loading) return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ clases, tareas }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ materias, clases, tareas }));
       setSaveError(false);
     } catch (e) {
       setSaveError(true);
     }
-  }, [clases, tareas, loading]);
+  }, [materias, clases, tareas, loading]);
+
+  /* si la materia filtrada se borró, volver a "todas" */
+  useEffect(() => {
+    if (filtro !== "todas" && !materias.find((m) => m.id === filtro)) {
+      setFiltro("todas");
+    }
+  }, [materias, filtro]);
 
   const materiaById = useMemo(() => {
     const m = {};
@@ -74,13 +85,40 @@ export default function App() {
     [materias, filtro]
   );
 
+  /* ---------- acciones materias ---------- */
+  const agregarMateria = (m) => setMaterias((prev) => [...prev, { ...m, id: uid() }]);
+  const actualizarMateria = (m) =>
+    setMaterias((prev) => prev.map((x) => (x.id === m.id ? m : x)));
+  const borrarMateria = (id) => {
+    const mat = materiaById[id];
+    if (!mat) return;
+    const ok = window.confirm(
+      `¿Eliminar "${mat.nombre}"? También se van a borrar sus clases y tareas.`
+    );
+    if (!ok) return;
+    setMaterias((prev) => prev.filter((m) => m.id !== id));
+    setClases((prev) => prev.filter((c) => c.materiaId !== id));
+    setTareas((prev) => prev.filter((t) => t.materiaId !== id));
+  };
+
   /* ---------- acciones clases ---------- */
-  const agregarClase = (c) => setClases((prev) => [...prev, { ...c, id: uid() }]);
+  const guardarClase = (c) => {
+    if (c.id) {
+      setClases((prev) => prev.map((x) => (x.id === c.id ? c : x)));
+    } else {
+      setClases((prev) => [...prev, { ...c, id: uid() }]);
+    }
+  };
   const borrarClase = (id) => setClases((prev) => prev.filter((c) => c.id !== id));
 
   /* ---------- acciones tareas ---------- */
-  const agregarTarea = (t) =>
-    setTareas((prev) => [...prev, { ...t, id: uid(), hecho: false }]);
+  const guardarTarea = (t) => {
+    if (t.id) {
+      setTareas((prev) => prev.map((x) => (x.id === t.id ? t : x)));
+    } else {
+      setTareas((prev) => [...prev, { ...t, id: uid(), hecho: false }]);
+    }
+  };
   const borrarTarea = (id) => setTareas((prev) => prev.filter((t) => t.id !== id));
   const toggleTarea = (id) =>
     setTareas((prev) =>
@@ -147,6 +185,12 @@ export default function App() {
           Checklist
           {pendientes.length > 0 && <span className="tab-badge">{pendientes.length}</span>}
         </button>
+        <button
+          className={"tab" + (vista === "materias" ? " tab-active" : "")}
+          onClick={() => setVista("materias")}
+        >
+          Materias
+        </button>
       </div>
 
       <main className="content">
@@ -159,12 +203,13 @@ export default function App() {
             materiaById={materiaById}
             clases={clasesFiltradas}
             onBorrar={borrarClase}
+            onEditar={(c) => setFormClase(c)}
             formClase={formClase}
             setFormClase={setFormClase}
-            onAgregar={agregarClase}
+            onGuardar={guardarClase}
             filtro={filtro}
           />
-        ) : (
+        ) : vista === "checklist" ? (
           <ChecklistView
             materias={materiasVisibles}
             materiaById={materiaById}
@@ -172,12 +217,23 @@ export default function App() {
             completadas={completadas}
             onToggle={toggleTarea}
             onBorrar={borrarTarea}
+            onEditar={(t) => setFormTarea(t)}
             mostrarCompletadas={mostrarCompletadas}
             setMostrarCompletadas={setMostrarCompletadas}
             formTarea={formTarea}
             setFormTarea={setFormTarea}
-            onAgregar={agregarTarea}
+            onGuardar={guardarTarea}
             filtro={filtro}
+          />
+        ) : (
+          <MateriasView
+            materias={materias}
+            onBorrar={borrarMateria}
+            onEditar={(m) => setFormMateria(m)}
+            formMateria={formMateria}
+            setFormMateria={setFormMateria}
+            onAgregar={agregarMateria}
+            onActualizar={actualizarMateria}
           />
         )}
       </main>
@@ -191,7 +247,7 @@ export default function App() {
 
 /* ---------- Vista Calendario ---------- */
 
-function CalendarioView({ dias, materias, materiaById, clases, onBorrar, formClase, setFormClase, onAgregar, filtro }) {
+function CalendarioView({ dias, materias, materiaById, clases, onBorrar, onEditar, formClase, setFormClase, onGuardar, filtro }) {
   const porDia = {};
   dias.forEach((d) => (porDia[d] = []));
   clases.forEach((c) => {
@@ -217,9 +273,10 @@ function CalendarioView({ dias, materias, materiaById, clases, onBorrar, formCla
                       <span className="clase-hora">
                         {c.horaInicio}–{c.horaFin}
                       </span>
-                      <button className="mini-x" onClick={() => onBorrar(c.id)} aria-label="Eliminar clase">
-                        ×
-                      </button>
+                      <span className="acciones-mini">
+                        <button className="mini-btn" onClick={() => onEditar(c)} aria-label="Editar clase">✎</button>
+                        <button className="mini-x" onClick={() => onBorrar(c.id)} aria-label="Eliminar clase">×</button>
+                      </span>
                     </div>
                     <p className="clase-materia" style={{ color: mat?.color }}>{mat?.sigla}</p>
                     <p className="clase-tipo">{c.tipo}{c.aula ? ` · ${c.aula}` : ""}</p>
@@ -235,14 +292,15 @@ function CalendarioView({ dias, materias, materiaById, clases, onBorrar, formCla
         <FormClase
           materias={materias}
           filtro={filtro}
+          inicial={formClase}
           onCancelar={() => setFormClase(null)}
           onGuardar={(c) => {
-            onAgregar(c);
+            onGuardar(c);
             setFormClase(null);
           }}
         />
       ) : (
-        <button className="btn-add" onClick={() => setFormClase(true)}>
+        <button className="btn-add" onClick={() => setFormClase({})}>
           + Agregar clase
         </button>
       )}
@@ -250,18 +308,19 @@ function CalendarioView({ dias, materias, materiaById, clases, onBorrar, formCla
   );
 }
 
-function FormClase({ materias, filtro, onCancelar, onGuardar }) {
-  const [materiaId, setMateriaId] = useState(filtro !== "todas" ? filtro : materias[0]?.id || "");
-  const [dia, setDia] = useState(DIAS[0]);
-  const [horaInicio, setHoraInicio] = useState("08:00");
-  const [horaFin, setHoraFin] = useState("10:00");
-  const [tipo, setTipo] = useState(TIPOS_CLASE[0]);
-  const [aula, setAula] = useState("");
+function FormClase({ materias, filtro, inicial, onCancelar, onGuardar }) {
+  const editando = !!inicial?.id;
+  const [materiaId, setMateriaId] = useState(inicial?.materiaId || (filtro !== "todas" ? filtro : materias[0]?.id || ""));
+  const [dia, setDia] = useState(inicial?.dia || DIAS[0]);
+  const [horaInicio, setHoraInicio] = useState(inicial?.horaInicio || "08:00");
+  const [horaFin, setHoraFin] = useState(inicial?.horaFin || "10:00");
+  const [tipo, setTipo] = useState(inicial?.tipo || TIPOS_CLASE[0]);
+  const [aula, setAula] = useState(inicial?.aula || "");
 
   const submit = (e) => {
     e.preventDefault();
     if (!materiaId) return;
-    onGuardar({ materiaId, dia, horaInicio, horaFin, tipo, aula: aula.trim() });
+    onGuardar({ id: inicial?.id, materiaId, dia, horaInicio, horaFin, tipo, aula: aula.trim() });
   };
 
   return (
@@ -308,7 +367,7 @@ function FormClase({ materias, filtro, onCancelar, onGuardar }) {
       </div>
       <div className="form-actions">
         <button type="button" className="btn-secundario" onClick={onCancelar}>Cancelar</button>
-        <button type="submit" className="btn-primario">Guardar clase</button>
+        <button type="submit" className="btn-primario">{editando ? "Guardar cambios" : "Guardar clase"}</button>
       </div>
     </form>
   );
@@ -317,8 +376,8 @@ function FormClase({ materias, filtro, onCancelar, onGuardar }) {
 /* ---------- Vista Checklist ---------- */
 
 function ChecklistView({
-  materias, materiaById, pendientes, completadas, onToggle, onBorrar,
-  mostrarCompletadas, setMostrarCompletadas, formTarea, setFormTarea, onAgregar, filtro,
+  materias, materiaById, pendientes, completadas, onToggle, onBorrar, onEditar,
+  mostrarCompletadas, setMostrarCompletadas, formTarea, setFormTarea, onGuardar, filtro,
 }) {
   const hoy = hoyISO();
 
@@ -328,14 +387,15 @@ function ChecklistView({
         <FormTarea
           materias={materias}
           filtro={filtro}
+          inicial={formTarea}
           onCancelar={() => setFormTarea(null)}
           onGuardar={(t) => {
-            onAgregar(t);
+            onGuardar(t);
             setFormTarea(null);
           }}
         />
       ) : (
-        <button className="btn-add" onClick={() => setFormTarea(true)}>
+        <button className="btn-add" onClick={() => setFormTarea({})}>
           + Agregar tarea
         </button>
       )}
@@ -361,7 +421,10 @@ function ChecklistView({
                 <p className="tarea-titulo">{t.titulo}</p>
                 {t.fecha && <p className="tarea-fecha">{formatearFecha(t.fecha)}</p>}
               </div>
-              <button className="mini-x" onClick={() => onBorrar(t.id)} aria-label="Eliminar tarea">×</button>
+              <span className="acciones-mini">
+                <button className="mini-btn" onClick={() => onEditar(t)} aria-label="Editar tarea">✎</button>
+                <button className="mini-x" onClick={() => onBorrar(t.id)} aria-label="Eliminar tarea">×</button>
+              </span>
             </li>
           );
         })}
@@ -386,7 +449,10 @@ function ChecklistView({
                       </div>
                       <p className="tarea-titulo">{t.titulo}</p>
                     </div>
-                    <button className="mini-x" onClick={() => onBorrar(t.id)} aria-label="Eliminar tarea">×</button>
+                    <span className="acciones-mini">
+                      <button className="mini-btn" onClick={() => onEditar(t)} aria-label="Editar tarea">✎</button>
+                      <button className="mini-x" onClick={() => onBorrar(t.id)} aria-label="Eliminar tarea">×</button>
+                    </span>
                   </li>
                 );
               })}
@@ -398,16 +464,17 @@ function ChecklistView({
   );
 }
 
-function FormTarea({ materias, filtro, onCancelar, onGuardar }) {
-  const [materiaId, setMateriaId] = useState(filtro !== "todas" ? filtro : materias[0]?.id || "");
-  const [tipo, setTipo] = useState(TIPOS_TAREA[0]);
-  const [titulo, setTitulo] = useState("");
-  const [fecha, setFecha] = useState(hoyISO());
+function FormTarea({ materias, filtro, inicial, onCancelar, onGuardar }) {
+  const editando = !!inicial?.id;
+  const [materiaId, setMateriaId] = useState(inicial?.materiaId || (filtro !== "todas" ? filtro : materias[0]?.id || ""));
+  const [tipo, setTipo] = useState(inicial?.tipo || TIPOS_TAREA[0]);
+  const [titulo, setTitulo] = useState(inicial?.titulo || "");
+  const [fecha, setFecha] = useState(inicial?.fecha || hoyISO());
 
   const submit = (e) => {
     e.preventDefault();
     if (!materiaId || !titulo.trim()) return;
-    onGuardar({ materiaId, tipo, titulo: titulo.trim(), fecha });
+    onGuardar({ id: inicial?.id, materiaId, tipo, titulo: titulo.trim(), fecha, hecho: inicial?.hecho || false });
   };
 
   return (
@@ -448,7 +515,84 @@ function FormTarea({ materias, filtro, onCancelar, onGuardar }) {
       </div>
       <div className="form-actions">
         <button type="button" className="btn-secundario" onClick={onCancelar}>Cancelar</button>
-        <button type="submit" className="btn-primario">Guardar tarea</button>
+        <button type="submit" className="btn-primario">{editando ? "Guardar cambios" : "Guardar tarea"}</button>
+      </div>
+    </form>
+  );
+}
+
+/* ---------- Vista Materias ---------- */
+
+function MateriasView({ materias, onBorrar, onEditar, formMateria, setFormMateria, onAgregar, onActualizar }) {
+  return (
+    <div>
+      <ul className="lista-materias">
+        {materias.map((m) => (
+          <li key={m.id} className="materia-card" style={{ borderLeftColor: m.color }}>
+            <div className="materia-info">
+              <p className="materia-nombre">{m.nombre}</p>
+              <p className="materia-sigla-chip" style={{ color: m.color }}>{m.sigla}</p>
+            </div>
+            <span className="acciones-mini">
+              <button className="mini-btn" onClick={() => onEditar(m)} aria-label="Editar materia">✎</button>
+              <button className="mini-x" onClick={() => onBorrar(m.id)} aria-label="Eliminar materia">×</button>
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {formMateria ? (
+        <FormMateria
+          inicial={formMateria}
+          onCancelar={() => setFormMateria(null)}
+          onGuardar={(m) => {
+            if (m.id) onActualizar(m);
+            else onAgregar(m);
+            setFormMateria(null);
+          }}
+        />
+      ) : (
+        <button className="btn-add" onClick={() => setFormMateria({})}>
+          + Agregar materia
+        </button>
+      )}
+    </div>
+  );
+}
+
+function FormMateria({ inicial, onCancelar, onGuardar }) {
+  const editando = !!inicial?.id;
+  const [nombre, setNombre] = useState(inicial?.nombre || "");
+  const [sigla, setSigla] = useState(inicial?.sigla || "");
+  const [color, setColor] = useState(inicial?.color || "#004987");
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!nombre.trim() || !sigla.trim()) return;
+    onGuardar({ id: inicial?.id, nombre: nombre.trim(), sigla: sigla.trim().toUpperCase(), color });
+  };
+
+  return (
+    <form className="form-card" onSubmit={submit}>
+      <div className="form-row">
+        <label className="label-ancha">
+          Nombre de la materia
+          <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Probabilidad y Estadística" required />
+        </label>
+      </div>
+      <div className="form-row">
+        <label>
+          Sigla / abreviatura
+          <input type="text" value={sigla} onChange={(e) => setSigla(e.target.value)} placeholder="Ej: PYE" maxLength={8} required />
+        </label>
+        <label>
+          Color
+          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="input-color" />
+        </label>
+      </div>
+      <div className="form-actions">
+        <button type="button" className="btn-secundario" onClick={onCancelar}>Cancelar</button>
+        <button type="submit" className="btn-primario">{editando ? "Guardar cambios" : "Guardar materia"}</button>
       </div>
     </form>
   );
@@ -472,6 +616,7 @@ const CSS = `
   --gris-claro: #87898A;
   --borde: #E3E5E6;
   --fondo: #FAFAFA;
+  color-scheme: light;
   font-family: 'Lato', sans-serif;
   color: var(--gris-oscuro);
   background: var(--fondo);
@@ -496,7 +641,7 @@ const CSS = `
   opacity: 0.5;
 }
 .topbar-inner { position: relative; }
-.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .brand-mark {
   font-family: 'Lato', sans-serif;
   font-weight: 900;
@@ -534,7 +679,7 @@ const CSS = `
 .chip-active { color: white !important; border-color: transparent !important; }
 
 .tabs {
-  display: flex; gap: 4px;
+  display: flex; gap: 4px; flex-wrap: wrap;
   padding: 18px 20px 0;
   border-bottom: 2px solid var(--borde);
 }
@@ -593,6 +738,13 @@ const CSS = `
 .clase-materia { margin: 4px 0 0; font-weight: 900; font-size: 12.5px; }
 .clase-tipo { margin: 2px 0 0; font-size: 12px; color: var(--gris-claro); }
 
+.acciones-mini { display: flex; align-items: center; gap: 4px; }
+.mini-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--gris-claro); font-size: 13px; line-height: 1;
+  padding: 2px 3px;
+}
+.mini-btn:hover { color: var(--azul); }
 .mini-x {
   background: none; border: none; cursor: pointer;
   color: var(--gris-claro); font-size: 16px; line-height: 1;
@@ -631,15 +783,17 @@ const CSS = `
 .form-row select, .form-row input {
   font-family: 'Lato', sans-serif;
   font-size: 13.5px;
-  padding: 7px 8px;
+  padding: 8px 9px;
   border: 1.5px solid var(--borde);
   border-radius: 5px;
+  background: white;
   color: var(--gris-oscuro);
 }
 .form-row select:focus, .form-row input:focus {
   outline: 2px solid var(--azul);
   outline-offset: 1px;
 }
+.input-color { padding: 3px; height: 36px; cursor: pointer; }
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .btn-primario, .btn-secundario {
   font-family: 'Lato', sans-serif;
@@ -664,7 +818,7 @@ const CSS = `
 .tarea-atrasada { background: #FDF1F0; }
 .tarea-hecha { opacity: 0.6; }
 .tarea-hecha .tarea-titulo { text-decoration: line-through; }
-.tarea-card input[type="checkbox"] { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--azul); cursor: pointer; }
+.tarea-card input[type="checkbox"] { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--azul); cursor: pointer; flex-shrink: 0; }
 .tarea-info { flex: 1; min-width: 0; }
 .tarea-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .tarea-sigla { font-weight: 900; font-size: 12px; }
@@ -676,7 +830,7 @@ const CSS = `
   font-size: 11px; font-weight: 900; color: white;
   background: var(--rojo); border-radius: 10px; padding: 1px 8px;
 }
-.tarea-titulo { margin: 4px 0 0; font-size: 14px; font-weight: 700; }
+.tarea-titulo { margin: 4px 0 0; font-size: 14px; font-weight: 700; word-break: break-word; }
 .tarea-fecha { margin: 2px 0 0; font-size: 12px; color: var(--gris-claro); }
 
 .completadas-block { margin-top: 20px; }
@@ -686,14 +840,45 @@ const CSS = `
   padding: 0;
 }
 
+/* Materias */
+.lista-materias { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.materia-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: white;
+  border: 1px solid var(--borde);
+  border-left: 4px solid var(--azul);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+.materia-info { min-width: 0; }
+.materia-nombre { margin: 0; font-weight: 700; font-size: 14px; word-break: break-word; }
+.materia-sigla-chip { margin: 2px 0 0; font-size: 12px; font-weight: 900; }
+
 .toast-error {
   position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
   background: var(--rojo); color: white; font-size: 13px; font-weight: 700;
   padding: 10px 18px; border-radius: 6px;
+  max-width: calc(100% - 32px);
+  text-align: center;
 }
 
-@media (max-width: 640px) {
+/* ---------- Responsive ---------- */
+@media (max-width: 760px) {
   .grid-semana { grid-template-columns: 1fr; }
   .col-dia-header { text-align: left; }
+}
+
+@media (max-width: 600px) {
+  .topbar { padding: 18px 16px 20px; }
+  .brand h1 { font-size: 21px; }
+  .brand-sub { font-size: 12.5px; }
+  .chips { padding: 14px 16px 0; }
+  .tabs { padding: 14px 16px 0; }
+  .tab { font-size: 13.5px; padding: 8px 4px 10px; }
+  .content { padding: 14px; }
+  .form-row { flex-direction: column; }
+  .form-row label { min-width: 0; }
+  .form-actions { flex-direction: column-reverse; }
+  .form-actions button { width: 100%; }
 }
 `;
