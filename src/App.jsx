@@ -96,7 +96,10 @@ export default function App() {
         setLoading(false);
         setSaveError(false);
       },
-      () => setSaveError(true)
+      (err) => {
+        console.error(err);
+        setSaveError(true);
+      }
     );
     const unsubClases = onSnapshot(
       collection(db, "users", usuario.uid, "clases"),
@@ -104,7 +107,10 @@ export default function App() {
         setClases(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setSaveError(false);
       },
-      () => setSaveError(true)
+      (err) => {
+        console.error(err);
+        setSaveError(true);
+      }
     );
     const unsubTareas = onSnapshot(
       collection(db, "users", usuario.uid, "tareas"),
@@ -112,7 +118,10 @@ export default function App() {
         setTareas(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setSaveError(false);
       },
-      () => setSaveError(true)
+      (err) => {
+        console.error(err);
+        setSaveError(true);
+      }
     );
     return () => {
       unsubMaterias();
@@ -144,6 +153,7 @@ export default function App() {
     try {
       await addDoc(collection(db, "users", usuario.uid, "materias"), m);
     } catch (e) {
+      console.error(e);
       setSaveError(true);
     }
   };
@@ -152,6 +162,7 @@ export default function App() {
       const { id, ...datos } = m;
       await updateDoc(doc(db, "users", usuario.uid, "materias", id), datos);
     } catch (e) {
+      console.error(e);
       setSaveError(true);
     }
   };
@@ -171,6 +182,7 @@ export default function App() {
         ...tareasDeLaMateria.map((t) => deleteDoc(doc(db, "users", usuario.uid, "tareas", t.id))),
       ]);
     } catch (e) {
+      console.error(e);
       setSaveError(true);
     }
   };
@@ -185,6 +197,7 @@ export default function App() {
         await addDoc(collection(db, "users", usuario.uid, "clases"), c);
       }
     } catch (e) {
+      console.error(e);
       setSaveError(true);
     }
   };
@@ -192,6 +205,7 @@ export default function App() {
     try {
       await deleteDoc(doc(db, "users", usuario.uid, "clases", id));
     } catch (e) {
+      console.error(e);
       setSaveError(true);
     }
   };
@@ -206,6 +220,7 @@ export default function App() {
         await addDoc(collection(db, "users", usuario.uid, "tareas"), { ...t, hecho: false });
       }
     } catch (e) {
+      console.error(e);
       setSaveError(true);
     }
   };
@@ -213,6 +228,7 @@ export default function App() {
     try {
       await deleteDoc(doc(db, "users", usuario.uid, "tareas", id));
     } catch (e) {
+      console.error(e);
       setSaveError(true);
     }
   };
@@ -222,6 +238,7 @@ export default function App() {
     try {
       await updateDoc(doc(db, "users", usuario.uid, "tareas", id), { hecho: !t.hecho });
     } catch (e) {
+      console.error(e);
       setSaveError(true);
     }
   };
