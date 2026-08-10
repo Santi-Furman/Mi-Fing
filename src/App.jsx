@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { db } from "./firebase";
+import { db, auth, googleProvider } from "./firebase";
+import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import {
   collection,
   onSnapshot,
@@ -32,6 +33,8 @@ function hoyISO() {
 /* ---------- Componente principal ---------- */
 
 export default function App() {
+  const [usuario, setUsuario] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [materias, setMaterias] = useState(MATERIAS_INICIALES);
   const [clases, setClases] = useState([]);
   const [tareas, setTareas] = useState([]);
@@ -44,26 +47,50 @@ export default function App() {
   const [formMateria, setFormMateria] = useState(null);
   const [saveError, setSaveError] = useState(false);
 
+  /* escuchar el estado de sesión */
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUsuario(u);
+      setAuthLoading(false);
+      if (!u) setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const iniciarSesion = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (e) {
+      console.error("Error al iniciar sesión", e);
+    }
+  };
+  const cerrarSesion = () => signOut(auth);
+
   /* sembrar las materias iniciales una sola vez, si la colección está vacía */
   useEffect(() => {
+    if (!usuario) return;
     (async () => {
       try {
-        const snap = await getDocs(collection(db, "materias"));
+        const snap = await getDocs(collection(db, "users", usuario.uid, "materias"));
         if (snap.empty) {
           await Promise.all(
-            MATERIAS_INICIALES.map((m) => setDoc(doc(db, "materias", m.id), m))
+            MATERIAS_INICIALES.map((m) =>
+              setDoc(doc(db, "users", usuario.uid, "materias", m.id), m)
+            )
           );
         }
       } catch (e) {
         console.error("Error sembrando materias iniciales", e);
       }
     })();
-  }, []);
+  }, [usuario]);
 
-  /* suscripción en tiempo real a las 3 colecciones */
+  /* suscripción en tiempo real a las 3 colecciones del usuario logueado */
   useEffect(() => {
+    if (!usuario) return;
+    setLoading(true);
     const unsubMaterias = onSnapshot(
-      collection(db, "materias"),
+      collection(db, "users", usuario.uid, "materias"),
       (snap) => {
         setMaterias(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setLoading(false);
@@ -71,12 +98,12 @@ export default function App() {
       () => setSaveError(true)
     );
     const unsubClases = onSnapshot(
-      collection(db, "clases"),
+      collection(db, "users", usuario.uid, "clases"),
       (snap) => setClases(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
       () => setSaveError(true)
     );
     const unsubTareas = onSnapshot(
-      collection(db, "tareas"),
+      collection(db, "users", usuario.uid, "tareas"),
       (snap) => setTareas(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
       () => setSaveError(true)
     );
@@ -85,7 +112,7 @@ export default function App() {
       unsubClases();
       unsubTareas();
     };
-  }, []);
+  }, [usuario]);
 
   /* si la materia filtrada se borró, volver a "todas" */
   useEffect(() => {
@@ -108,7 +135,7 @@ export default function App() {
   /* ---------- acciones materias ---------- */
   const agregarMateria = async (m) => {
     try {
-      await addDoc(collection(db, "materias"), m);
+      await addDoc(collection(db, "users", usuario.uid, "materias"), m);
     } catch (e) {
       setSaveError(true);
     }
@@ -116,7 +143,7 @@ export default function App() {
   const actualizarMateria = async (m) => {
     try {
       const { id, ...datos } = m;
-      await updateDoc(doc(db, "materias", id), datos);
+      await updateDoc(doc(db, "users", usuario.uid, "materias", id), datos);
     } catch (e) {
       setSaveError(true);
     }
@@ -132,9 +159,9 @@ export default function App() {
       const clasesDeLaMateria = clases.filter((c) => c.materiaId === id);
       const tareasDeLaMateria = tareas.filter((t) => t.materiaId === id);
       await Promise.all([
-        deleteDoc(doc(db, "materias", id)),
-        ...clasesDeLaMateria.map((c) => deleteDoc(doc(db, "clases", c.id))),
-        ...tareasDeLaMateria.map((t) => deleteDoc(doc(db, "tareas", t.id))),
+        deleteDoc(doc(db, "users", usuario.uid, "materias", id)),
+        ...clasesDeLaMateria.map((c) => deleteDoc(doc(db, "users", usuario.uid, "clases", c.id))),
+        ...tareasDeLaMateria.map((t) => deleteDoc(doc(db, "users", usuario.uid, "tareas", t.id))),
       ]);
     } catch (e) {
       setSaveError(true);
@@ -146,9 +173,9 @@ export default function App() {
     try {
       if (c.id) {
         const { id, ...datos } = c;
-        await updateDoc(doc(db, "clases", id), datos);
+        await updateDoc(doc(db, "users", usuario.uid, "clases", id), datos);
       } else {
-        await addDoc(collection(db, "clases"), c);
+        await addDoc(collection(db, "users", usuario.uid, "clases"), c);
       }
     } catch (e) {
       setSaveError(true);
@@ -156,7 +183,7 @@ export default function App() {
   };
   const borrarClase = async (id) => {
     try {
-      await deleteDoc(doc(db, "clases", id));
+      await deleteDoc(doc(db, "users", usuario.uid, "clases", id));
     } catch (e) {
       setSaveError(true);
     }
@@ -167,9 +194,9 @@ export default function App() {
     try {
       if (t.id) {
         const { id, ...datos } = t;
-        await updateDoc(doc(db, "tareas", id), datos);
+        await updateDoc(doc(db, "users", usuario.uid, "tareas", id), datos);
       } else {
-        await addDoc(collection(db, "tareas"), { ...t, hecho: false });
+        await addDoc(collection(db, "users", usuario.uid, "tareas"), { ...t, hecho: false });
       }
     } catch (e) {
       setSaveError(true);
@@ -177,7 +204,7 @@ export default function App() {
   };
   const borrarTarea = async (id) => {
     try {
-      await deleteDoc(doc(db, "tareas", id));
+      await deleteDoc(doc(db, "users", usuario.uid, "tareas", id));
     } catch (e) {
       setSaveError(true);
     }
@@ -186,7 +213,7 @@ export default function App() {
     const t = tareas.find((x) => x.id === id);
     if (!t) return;
     try {
-      await updateDoc(doc(db, "tareas", id), { hecho: !t.hecho });
+      await updateDoc(doc(db, "users", usuario.uid, "tareas", id), { hecho: !t.hecho });
     } catch (e) {
       setSaveError(true);
     }
@@ -203,6 +230,37 @@ export default function App() {
     .sort((a, b) => (a.fecha || "").localeCompare(b.fecha || ""));
   const completadas = tareasFiltradas.filter((t) => t.hecho);
 
+  if (authLoading) {
+    return (
+      <div className="app-root">
+        <style>{CSS}</style>
+        <p className="muted center" style={{ marginTop: 60 }}>
+          Cargando…
+        </p>
+      </div>
+    );
+  }
+
+  if (!usuario) {
+    return (
+      <div className="app-root">
+        <style>{CSS}</style>
+        <div className="login-screen">
+          <div className="login-card">
+            <span className="brand-mark">FING</span>
+            <h1 className="login-title">Mi Fing</h1>
+            <p className="login-sub">
+              Iniciá sesión para ver y editar tu calendario y checklist de materias.
+            </p>
+            <button className="btn-google" onClick={iniciarSesion}>
+              Iniciar sesión con Google
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-root">
       <style>{CSS}</style>
@@ -210,9 +268,19 @@ export default function App() {
       <header className="topbar">
         <div className="topbar-pattern" aria-hidden="true" />
         <div className="topbar-inner">
-          <div className="brand">
-            <span className="brand-mark">FING</span>
-            <h1>Mi Fing</h1>
+          <div className="brand-row">
+            <div className="brand">
+              <span className="brand-mark">FING</span>
+              <h1>Mi Fing</h1>
+            </div>
+            <div className="user-box">
+              {usuario.photoURL && (
+                <img className="user-avatar" src={usuario.photoURL} alt="" />
+              )}
+              <button className="btn-logout" onClick={cerrarSesion}>
+                Cerrar sesión
+              </button>
+            </div>
           </div>
           <p className="brand-sub">Clases, prácticos y talleres de tus materias</p>
         </div>
@@ -728,7 +796,60 @@ body {
   opacity: 0.5;
 }
 .topbar-inner { position: relative; }
+.brand-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.user-box { display: flex; align-items: center; gap: 8px; }
+.user-avatar { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.6); }
+.btn-logout {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.4);
+  color: white;
+  font-family: 'Lato', sans-serif;
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.btn-logout:hover { background: rgba(255,255,255,0.22); }
+
+.login-screen {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.login-card {
+  background: white;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 36px 28px;
+  text-align: center;
+  max-width: 340px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+}
+.login-title {
+  font-family: 'Merriweather', serif;
+  font-weight: 700;
+  font-size: 24px;
+  color: var(--azul);
+  margin: 14px 0 6px;
+}
+.login-sub { color: var(--gris-claro); font-size: 13.5px; margin-bottom: 22px; }
+.btn-google {
+  background: var(--azul);
+  color: white;
+  border: none;
+  font-family: 'Lato', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 11px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  width: 100%;
+}
+.btn-google:hover { background: #003a6d; }
 .brand-mark {
   font-family: 'Lato', sans-serif;
   font-weight: 900;
