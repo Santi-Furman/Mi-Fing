@@ -7,8 +7,7 @@
   "background_color": "#FAFAFA",
   "theme_color": "#004987",
   "icons": [
-    { "src": "/MiFing.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/MiFing.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/MiFing.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/Mi-Fing.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/Mi-Fing.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
