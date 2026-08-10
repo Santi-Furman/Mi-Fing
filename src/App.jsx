@@ -479,7 +479,8 @@ function FormClase({ materias, filtro, inicial, onCancelar, onGuardar }) {
   const submit = (e) => {
     e.preventDefault();
     if (!materiaId) return;
-    onGuardar({ id: inicial?.id, materiaId, dia, horaInicio, horaFin, tipo, aula: aula.trim() });
+    const datos = { materiaId, dia, horaInicio, horaFin, tipo, aula: aula.trim() };
+    onGuardar(inicial?.id ? { id: inicial.id, ...datos } : datos);
   };
 
   return (
@@ -633,7 +634,8 @@ function FormTarea({ materias, filtro, inicial, onCancelar, onGuardar }) {
   const submit = (e) => {
     e.preventDefault();
     if (!materiaId || !titulo.trim()) return;
-    onGuardar({ id: inicial?.id, materiaId, tipo, titulo: titulo.trim(), fecha, hecho: inicial?.hecho || false });
+    const datos = { materiaId, tipo, titulo: titulo.trim(), fecha, hecho: inicial?.hecho || false };
+    onGuardar(inicial?.id ? { id: inicial.id, ...datos } : datos);
   };
 
   return (
@@ -728,7 +730,8 @@ function FormMateria({ inicial, onCancelar, onGuardar }) {
   const submit = (e) => {
     e.preventDefault();
     if (!nombre.trim() || !sigla.trim()) return;
-    onGuardar({ id: inicial?.id, nombre: nombre.trim(), sigla: sigla.trim().toUpperCase(), color });
+    const datos = { nombre: nombre.trim(), sigla: sigla.trim().toUpperCase(), color };
+    onGuardar(inicial?.id ? { id: inicial.id, ...datos } : datos);
   };
 
   return (
