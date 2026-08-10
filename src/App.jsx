@@ -94,17 +94,24 @@ export default function App() {
       (snap) => {
         setMaterias(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setLoading(false);
+        setSaveError(false);
       },
       () => setSaveError(true)
     );
     const unsubClases = onSnapshot(
       collection(db, "users", usuario.uid, "clases"),
-      (snap) => setClases(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      (snap) => {
+        setClases(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setSaveError(false);
+      },
       () => setSaveError(true)
     );
     const unsubTareas = onSnapshot(
       collection(db, "users", usuario.uid, "tareas"),
-      (snap) => setTareas(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      (snap) => {
+        setTareas(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setSaveError(false);
+      },
       () => setSaveError(true)
     );
     return () => {
