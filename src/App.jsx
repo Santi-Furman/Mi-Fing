@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { db, auth, googleProvider } from "./firebase";
-import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
+import { onAuthStateChanged, signInWithRedirect, getRedirectResult, signOut } from "firebase/auth";
 import {
   collection,
   onSnapshot,
@@ -49,6 +49,9 @@ export default function App() {
 
   /* escuchar el estado de sesión */
   useEffect(() => {
+    getRedirectResult(auth).catch((e) => {
+      console.error("Error al volver del login con Google", e);
+    });
     const unsub = onAuthStateChanged(auth, (u) => {
       setUsuario(u);
       setAuthLoading(false);
@@ -59,7 +62,7 @@ export default function App() {
 
   const iniciarSesion = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
+      await signInWithRedirect(auth, googleProvider);
     } catch (e) {
       console.error("Error al iniciar sesión", e);
     }
