@@ -1,4 +1,15 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { db } from "./firebase";
+import {
+  collection,
+  onSnapshot,
+  doc,
+  setDoc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  getDocs,
+} from "firebase/firestore";
 
 /* ---------- Datos iniciales ---------- */
 
@@ -11,10 +22,6 @@ const MATERIAS_INICIALES = [
 const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
 const TIPOS_CLASE = ["Teórico", "Práctico", "Laboratorio"];
 const TIPOS_TAREA = ["Práctico", "Taller", "Entrega", "Parcial", "Lectura"];
-
-const STORAGE_KEY = "fing-tracker-data-v1";
-
-const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
 function hoyISO() {
   const d = new Date();
@@ -37,35 +44,48 @@ export default function App() {
   const [formMateria, setFormMateria] = useState(null);
   const [saveError, setSaveError] = useState(false);
 
-  /* cargar datos guardados */
+  /* sembrar las materias iniciales una sola vez, si la colección está vacía */
   useEffect(() => {
-    try {
-      const data = localStorage.getItem(STORAGE_KEY);
-      if (data) {
-        const parsed = JSON.parse(data);
-        if (Array.isArray(parsed.materias) && parsed.materias.length > 0) {
-          setMaterias(parsed.materias);
+    (async () => {
+      try {
+        const snap = await getDocs(collection(db, "materias"));
+        if (snap.empty) {
+          await Promise.all(
+            MATERIAS_INICIALES.map((m) => setDoc(doc(db, "materias", m.id), m))
+          );
         }
-        setClases(Array.isArray(parsed.clases) ? parsed.clases : []);
-        setTareas(Array.isArray(parsed.tareas) ? parsed.tareas : []);
+      } catch (e) {
+        console.error("Error sembrando materias iniciales", e);
       }
-    } catch (e) {
-      console.error("Error leyendo localStorage", e);
-    } finally {
-      setLoading(false);
-    }
+    })();
   }, []);
 
-  /* guardar cada vez que cambian los datos */
+  /* suscripción en tiempo real a las 3 colecciones */
   useEffect(() => {
-    if (loading) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ materias, clases, tareas }));
-      setSaveError(false);
-    } catch (e) {
-      setSaveError(true);
-    }
-  }, [materias, clases, tareas, loading]);
+    const unsubMaterias = onSnapshot(
+      collection(db, "materias"),
+      (snap) => {
+        setMaterias(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setLoading(false);
+      },
+      () => setSaveError(true)
+    );
+    const unsubClases = onSnapshot(
+      collection(db, "clases"),
+      (snap) => setClases(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      () => setSaveError(true)
+    );
+    const unsubTareas = onSnapshot(
+      collection(db, "tareas"),
+      (snap) => setTareas(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      () => setSaveError(true)
+    );
+    return () => {
+      unsubMaterias();
+      unsubClases();
+      unsubTareas();
+    };
+  }, []);
 
   /* si la materia filtrada se borró, volver a "todas" */
   useEffect(() => {
@@ -86,44 +106,91 @@ export default function App() {
   );
 
   /* ---------- acciones materias ---------- */
-  const agregarMateria = (m) => setMaterias((prev) => [...prev, { ...m, id: uid() }]);
-  const actualizarMateria = (m) =>
-    setMaterias((prev) => prev.map((x) => (x.id === m.id ? m : x)));
-  const borrarMateria = (id) => {
+  const agregarMateria = async (m) => {
+    try {
+      await addDoc(collection(db, "materias"), m);
+    } catch (e) {
+      setSaveError(true);
+    }
+  };
+  const actualizarMateria = async (m) => {
+    try {
+      const { id, ...datos } = m;
+      await updateDoc(doc(db, "materias", id), datos);
+    } catch (e) {
+      setSaveError(true);
+    }
+  };
+  const borrarMateria = async (id) => {
     const mat = materiaById[id];
     if (!mat) return;
     const ok = window.confirm(
       `¿Eliminar "${mat.nombre}"? También se van a borrar sus clases y tareas.`
     );
     if (!ok) return;
-    setMaterias((prev) => prev.filter((m) => m.id !== id));
-    setClases((prev) => prev.filter((c) => c.materiaId !== id));
-    setTareas((prev) => prev.filter((t) => t.materiaId !== id));
+    try {
+      const clasesDeLaMateria = clases.filter((c) => c.materiaId === id);
+      const tareasDeLaMateria = tareas.filter((t) => t.materiaId === id);
+      await Promise.all([
+        deleteDoc(doc(db, "materias", id)),
+        ...clasesDeLaMateria.map((c) => deleteDoc(doc(db, "clases", c.id))),
+        ...tareasDeLaMateria.map((t) => deleteDoc(doc(db, "tareas", t.id))),
+      ]);
+    } catch (e) {
+      setSaveError(true);
+    }
   };
 
   /* ---------- acciones clases ---------- */
-  const guardarClase = (c) => {
-    if (c.id) {
-      setClases((prev) => prev.map((x) => (x.id === c.id ? c : x)));
-    } else {
-      setClases((prev) => [...prev, { ...c, id: uid() }]);
+  const guardarClase = async (c) => {
+    try {
+      if (c.id) {
+        const { id, ...datos } = c;
+        await updateDoc(doc(db, "clases", id), datos);
+      } else {
+        await addDoc(collection(db, "clases"), c);
+      }
+    } catch (e) {
+      setSaveError(true);
     }
   };
-  const borrarClase = (id) => setClases((prev) => prev.filter((c) => c.id !== id));
+  const borrarClase = async (id) => {
+    try {
+      await deleteDoc(doc(db, "clases", id));
+    } catch (e) {
+      setSaveError(true);
+    }
+  };
 
   /* ---------- acciones tareas ---------- */
-  const guardarTarea = (t) => {
-    if (t.id) {
-      setTareas((prev) => prev.map((x) => (x.id === t.id ? t : x)));
-    } else {
-      setTareas((prev) => [...prev, { ...t, id: uid(), hecho: false }]);
+  const guardarTarea = async (t) => {
+    try {
+      if (t.id) {
+        const { id, ...datos } = t;
+        await updateDoc(doc(db, "tareas", id), datos);
+      } else {
+        await addDoc(collection(db, "tareas"), { ...t, hecho: false });
+      }
+    } catch (e) {
+      setSaveError(true);
     }
   };
-  const borrarTarea = (id) => setTareas((prev) => prev.filter((t) => t.id !== id));
-  const toggleTarea = (id) =>
-    setTareas((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, hecho: !t.hecho } : t))
-    );
+  const borrarTarea = async (id) => {
+    try {
+      await deleteDoc(doc(db, "tareas", id));
+    } catch (e) {
+      setSaveError(true);
+    }
+  };
+  const toggleTarea = async (id) => {
+    const t = tareas.find((x) => x.id === id);
+    if (!t) return;
+    try {
+      await updateDoc(doc(db, "tareas", id), { hecho: !t.hecho });
+    } catch (e) {
+      setSaveError(true);
+    }
+  };
 
   const clasesFiltradas =
     filtro === "todas" ? clases : clases.filter((c) => c.materiaId === filtro);
@@ -608,6 +675,20 @@ function formatearFecha(iso) {
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&family=Merriweather:wght@700&display=swap');
 
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #FAFAFA;
+}
+
+body {
+  min-height: 100dvh;
+}
+
 .app-root {
   --azul: #004987;
   --naranja: #F2AC32;
@@ -620,11 +701,17 @@ const CSS = `
   font-family: 'Lato', sans-serif;
   color: var(--gris-oscuro);
   background: var(--fondo);
-  min-height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
   max-width: 960px;
   margin: 0 auto;
   padding-bottom: 40px;
+  display: flex;
+  flex-direction: column;
 }
+
+.content { flex: 1; }
 
 .topbar {
   position: relative;
