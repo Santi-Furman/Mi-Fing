@@ -252,6 +252,15 @@ export default function App() {
     }
   };
 
+  const actualizarProgreso = async (id, progreso) => {
+    try {
+      await updateDoc(doc(db, "users", usuario.uid, "tareas", id), { progreso });
+    } catch (e) {
+      console.error(e);
+      setSaveError(true);
+    }
+  };
+
   const clasesFiltradas =
     filtro === "todas" ? clases : clases.filter((c) => c.materiaId === filtro);
   const tareasFiltradas = (
@@ -384,6 +393,7 @@ export default function App() {
             pendientes={pendientes}
             completadas={completadas}
             onToggle={toggleTarea}
+            onActualizarProgreso={actualizarProgreso}
             onBorrar={borrarTarea}
             onEditar={(t) => setFormTarea(t)}
             mostrarCompletadas={mostrarCompletadas}
@@ -545,7 +555,7 @@ function FormClase({ materias, filtro, inicial, onCancelar, onGuardar }) {
 /* ---------- Vista Checklist ---------- */
 
 function ChecklistView({
-  materias, materiaById, pendientes, completadas, onToggle, onBorrar, onEditar,
+  materias, materiaById, pendientes, completadas, onToggle, onActualizarProgreso, onBorrar, onEditar,
   mostrarCompletadas, setMostrarCompletadas, formTarea, setFormTarea, onGuardar, filtro,
 }) {
   const hoy = hoyISO();
@@ -581,6 +591,7 @@ function ChecklistView({
           return (
             <li key={t.id} className={"tarea-card" + (atrasada ? " tarea-atrasada" : "")} style={{ borderLeftColor: mat?.color }}>
               <input type="checkbox" checked={false} onChange={() => onToggle(t.id)} aria-label="Marcar como hecha" />
+              <ProgresoBox valor={t.progreso} onGuardar={(v) => onActualizarProgreso(t.id, v)} />
               <div className="tarea-info">
                 <div className="tarea-top">
                   <span className="tarea-sigla" style={{ color: mat?.color }}>{mat?.sigla}</span>
@@ -588,10 +599,7 @@ function ChecklistView({
                   {atrasada && <span className="badge-atrasado">Atrasado</span>}
                 </div>
                 <p className="tarea-titulo">{t.titulo}</p>
-                <div className="tarea-meta">
-                  {t.fecha && <p className="tarea-fecha">{formatearFecha(t.fecha)}</p>}
-                  {t.progreso && <span className="badge-progreso">Vas por: {t.progreso}</span>}
-                </div>
+                {t.fecha && <p className="tarea-fecha">{formatearFecha(t.fecha)}</p>}
               </div>
               <span className="acciones-mini">
                 <button className="mini-btn" onClick={() => onEditar(t)} aria-label="Editar tarea">✎</button>
