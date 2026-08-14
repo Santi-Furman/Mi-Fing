@@ -22,7 +22,16 @@ const MATERIAS_INICIALES = [
 
 const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
 const TIPOS_CLASE = ["Teórico", "Práctico", "Laboratorio"];
-const TIPOS_TAREA = ["Práctico", "Taller", "Entrega", "Parcial", "Lectura"];
+const TIPOS_TAREA = ["Práctico", "Taller", "Entrega", "Parcial", "Lectura", "OpenFing"];
+
+const PLACEHOLDER_PROGRESO = {
+  Lectura: "Ej: página 45",
+  OpenFing: "Ej: minuto 12",
+  Práctico: "Ej: ejercicio 3",
+  Taller: "Ej: parte 2 de 4",
+  Entrega: "Ej: sección 1 lista",
+  Parcial: "Ej: repasé temas 1-3",
+};
 
 function hoyISO() {
   const d = new Date();
@@ -579,7 +588,10 @@ function ChecklistView({
                   {atrasada && <span className="badge-atrasado">Atrasado</span>}
                 </div>
                 <p className="tarea-titulo">{t.titulo}</p>
-                {t.fecha && <p className="tarea-fecha">{formatearFecha(t.fecha)}</p>}
+                <div className="tarea-meta">
+                  {t.fecha && <p className="tarea-fecha">{formatearFecha(t.fecha)}</p>}
+                  {t.progreso && <span className="badge-progreso">Vas por: {t.progreso}</span>}
+                </div>
               </div>
               <span className="acciones-mini">
                 <button className="mini-btn" onClick={() => onEditar(t)} aria-label="Editar tarea">✎</button>
@@ -630,11 +642,19 @@ function FormTarea({ materias, filtro, inicial, onCancelar, onGuardar }) {
   const [tipo, setTipo] = useState(inicial?.tipo || TIPOS_TAREA[0]);
   const [titulo, setTitulo] = useState(inicial?.titulo || "");
   const [fecha, setFecha] = useState(inicial?.fecha || hoyISO());
+  const [progreso, setProgreso] = useState(inicial?.progreso || "");
 
   const submit = (e) => {
     e.preventDefault();
     if (!materiaId || !titulo.trim()) return;
-    const datos = { materiaId, tipo, titulo: titulo.trim(), fecha, hecho: inicial?.hecho || false };
+    const datos = {
+      materiaId,
+      tipo,
+      titulo: titulo.trim(),
+      fecha,
+      hecho: inicial?.hecho || false,
+      progreso: progreso.trim(),
+    };
     onGuardar(inicial?.id ? { id: inicial.id, ...datos } : datos);
   };
 
@@ -671,6 +691,17 @@ function FormTarea({ materias, filtro, inicial, onCancelar, onGuardar }) {
             onChange={(e) => setTitulo(e.target.value)}
             placeholder="Ej: Práctico 3 - Caché"
             required
+          />
+        </label>
+      </div>
+      <div className="form-row">
+        <label className="label-ancha">
+          ¿Por dónde vas? (opcional)
+          <input
+            type="text"
+            value={progreso}
+            onChange={(e) => setProgreso(e.target.value)}
+            placeholder={PLACEHOLDER_PROGRESO[tipo] || "Ej: mitad hecho"}
           />
         </label>
       </div>
@@ -1066,7 +1097,13 @@ body {
   background: var(--rojo); border-radius: 10px; padding: 1px 8px;
 }
 .tarea-titulo { margin: 4px 0 0; font-size: 14px; font-weight: 700; word-break: break-word; }
-.tarea-fecha { margin: 2px 0 0; font-size: 12px; color: var(--gris-claro); }
+.tarea-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.tarea-fecha { margin: 0; font-size: 12px; color: var(--gris-claro); }
+.badge-progreso {
+  font-size: 11.5px; font-weight: 700; color: var(--azul);
+  background: #EAF2FA;
+  border-radius: 10px; padding: 1px 9px;
+}
 
 .completadas-block { margin-top: 20px; }
 .link-toggle {
